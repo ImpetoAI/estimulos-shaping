@@ -30,6 +30,11 @@ dist-ssr
 # Workspace
 .workspace/
 
+# Client docs (large files + Windows-incompatible names)
+APP CAPE /
+Ideias Inicial Estimulos/
+Meeting Transcription.txt
+
 # Large files
 *.xlsx
 Ideias Inicial Estimulos/6/*.pdf
