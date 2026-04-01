@@ -1,150 +1,72 @@
 import { useState, useEffect, useCallback } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, ChevronLeft, Check, X, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { ClipboardList, Calendar, Clock, FileText, ExternalLink, CheckCircle2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { supabase, db } from "@/lib/supabase";
+import { Skeleton } from "@/components/ui/skeleton";
+import { db } from "@/lib/supabase";
 import type { CicloTabProps } from "./_shared";
-import { KNOWLEDGE_AREA_LABELS, type KnowledgeArea } from "@/types/portal";
-import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 interface EvalRegistry {
   id: string;
   evaluation_date: string;
   knowledge_area: string;
-  contents: string;
+  contents: string | null;
   completed_evaluation: boolean;
   conducted_by: string;
+  duration_minutes: number | null;
+  exam_type: string | null;
+  exam_file_url: string | null;
+  description: string | null;
+  showed_resistance: boolean;
+  showed_discomfort: boolean;
+  discomfort_description: string | null;
+  used_support_resources: boolean;
+  support_resources_description: string | null;
+  understood_commands: boolean;
+  commands_observation: string | null;
+  used_reinforcers: boolean;
+  reinforcers_description: string | null;
   created_at: string;
 }
 
-// ─── Yes/No Toggle ───────────────────────────────────────────────────────────
-function YesNoToggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
+const AREA_LABELS: Record<string, string> = {
+  portugues: "Portugues",
+  matematica: "Matematica",
+  ciencias: "Ciencias",
+  historia: "Historia",
+  geografia: "Geografia",
+  artes: "Artes",
+  educacao_fisica: "Educacao Fisica",
+  ingles: "Ingles",
+};
+
+function formatDate(d: string) {
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y}`;
+}
+
+function BoolBadge({ value, label }: { value: boolean; label: string }) {
   return (
-    <div className="space-y-1.5">
-      <p className="text-sm font-medium">{label}</p>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onChange(true)}
-          className={cn(
-            "flex-1 h-9 rounded-lg text-sm font-semibold border-2 flex items-center justify-center gap-1.5 transition-all",
-            value ? "bg-success/10 border-success text-success" : "bg-background border-border text-muted-foreground hover:border-success/50"
-          )}
-        >
-          <Check className="w-3.5 h-3.5" /> Sim
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(false)}
-          className={cn(
-            "flex-1 h-9 rounded-lg text-sm font-semibold border-2 flex items-center justify-center gap-1.5 transition-all",
-            !value ? "bg-destructive/10 border-destructive text-destructive" : "bg-background border-border text-muted-foreground hover:border-destructive/50"
-          )}
-        >
-          <X className="w-3.5 h-3.5" /> Não
-        </button>
-      </div>
+    <div className="flex items-center gap-1.5 text-xs">
+      {value ? (
+        <CheckCircle2 size={12} className="text-success" />
+      ) : (
+        <XCircle size={12} className="text-muted-foreground" />
+      )}
+      <span className={value ? "text-foreground" : "text-muted-foreground"}>{label}</span>
     </div>
   );
 }
 
-// ─── Form schema ─────────────────────────────────────────────────────────────
-const schema = z.object({
-  evaluation_date: z.string().min(1, "Informe a data"),
-  duration_minutes: z.coerce.number().min(1).max(480),
-  contents: z.string().min(1, "Informe os conteúdos"),
-  knowledge_area: z.string().min(1, "Selecione a área") as z.ZodType<KnowledgeArea>,
-  exam_type: z.enum(["v1", "v2"]).optional(),
-  showed_resistance: z.boolean(),
-  showed_discomfort: z.boolean(),
-  discomfort_description: z.string().optional(),
-  used_support_resources: z.boolean(),
-  support_resources_description: z.string().optional(),
-  understood_commands: z.boolean(),
-  commands_observation: z.string().optional(),
-  conducted_by: z.enum(["atendente_terapeutica", "professor"]),
-  used_reinforcers: z.boolean(),
-  reinforcers_description: z.string().optional(),
-  completed_evaluation: z.boolean(),
-  free_description: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.showed_discomfort && !data.discomfort_description?.trim())
-    ctx.addIssue({ code: "custom", path: ["discomfort_description"], message: "Descreva o desconforto" });
-  if (data.used_support_resources && !data.support_resources_description?.trim())
-    ctx.addIssue({ code: "custom", path: ["support_resources_description"], message: "Descreva os recursos" });
-  if (!data.understood_commands && !data.commands_observation?.trim())
-    ctx.addIssue({ code: "custom", path: ["commands_observation"], message: "Descreva a dificuldade" });
-  if (data.used_reinforcers && !data.reinforcers_description?.trim())
-    ctx.addIssue({ code: "custom", path: ["reinforcers_description"], message: "Descreva os reforçadores" });
-});
-
-type FormData = z.infer<typeof schema>;
-
 export default function RegistroAvaliativoTab({ caseId, bimester, studentId }: CicloTabProps) {
   const [records, setRecords] = useState<EvalRegistry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [examFile, setExamFile] = useState<File | null>(null);
-  const { user } = useAuth();
-
-  const form = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      evaluation_date: new Date().toISOString().split("T")[0],
-      duration_minutes: 45,
-      contents: "",
-      knowledge_area: "portugues",
-      exam_type: undefined,
-      showed_resistance: false,
-      showed_discomfort: false,
-      discomfort_description: "",
-      used_support_resources: false,
-      support_resources_description: "",
-      understood_commands: true,
-      commands_observation: "",
-      conducted_by: "atendente_terapeutica",
-      used_reinforcers: false,
-      reinforcers_description: "",
-      completed_evaluation: true,
-      free_description: "",
-    },
-  });
-
-  const watchDiscomfort = form.watch("showed_discomfort");
-  const watchSupport = form.watch("used_support_resources");
-  const watchUnderstood = form.watch("understood_commands");
-  const watchReinforcers = form.watch("used_reinforcers");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadRecords = useCallback(async () => {
     setLoading(true);
     const { data } = await db
       .from("evaluation_registries")
-      .select("id, evaluation_date, knowledge_area, contents, completed_evaluation, conducted_by, created_at")
+      .select("*")
       .eq("student_id", studentId)
       .eq("bimester", bimester)
       .order("evaluation_date", { ascending: false });
@@ -154,261 +76,165 @@ export default function RegistroAvaliativoTab({ caseId, bimester, studentId }: C
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
-  const onSubmit = async (values: FormData) => {
-    setSaving(true);
-    try {
-      let exam_file_url: string | undefined;
-      if (examFile) {
-        const path = `${studentId}/${Date.now()}-${examFile.name}`;
-        const { error: uploadError } = await supabase.storage.from("exam-files").upload(path, examFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("exam-files").getPublicUrl(path);
-        exam_file_url = urlData.publicUrl;
-      }
-
-      const { error } = await db.from("evaluation_registries").insert({
-        student_id: studentId,
-        case_id: caseId,
-        bimester,
-        evaluator_id: user?.id,
-        ...values,
-        exam_file_url,
-      });
-      if (error) throw error;
-
-      toast.success("Registro salvo!");
-      setShowForm(false);
-      setExamFile(null);
-      form.reset();
-      loadRecords();
-    } catch {
-      toast.error("Erro ao salvar registro.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (showForm) {
+  if (loading) {
     return (
-      <div className="p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setShowForm(false)} className="gap-1.5">
-            <ChevronLeft size={15} /> Voltar
-          </Button>
-          <h3 className="font-semibold text-sm">Novo Registro Avaliativo</h3>
-        </div>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="evaluation_date" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="duration_minutes" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Duração (min)</FormLabel>
-                  <FormControl><Input type="number" min={1} max={480} {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-
-            <FormField control={form.control} name="knowledge_area" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Área de Conhecimento</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {(Object.keys(KNOWLEDGE_AREA_LABELS) as KnowledgeArea[]).map((k) => (
-                      <SelectItem key={k} value={k}>{KNOWLEDGE_AREA_LABELS[k]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="exam_type" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tipo de Prova</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="v1">V1 — Mensal</SelectItem>
-                    <SelectItem value="v2">V2 — Bimestral</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="contents" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Conteúdos</FormLabel>
-                <FormControl><Input placeholder="Ex: Frações, interpretação de texto..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {/* Toggles */}
-            {([
-              { name: "showed_resistance" as const, label: "Apresentou resistência?" },
-              { name: "showed_discomfort" as const, label: "Demonstrou desconforto?" },
-              { name: "used_support_resources" as const, label: "Utilizou recursos de apoio?" },
-              { name: "understood_commands" as const, label: "Compreendeu os comandos?" },
-              { name: "used_reinforcers" as const, label: "Utilizou reforçadores?" },
-              { name: "completed_evaluation" as const, label: "Concluiu a avaliação?" },
-            ] as const).map(({ name, label }) => (
-              <FormField key={name} control={form.control} name={name} render={({ field }) => (
-                <FormItem>
-                  <YesNoToggle label={label} value={field.value} onChange={field.onChange} />
-                  <FormMessage />
-                </FormItem>
-              )} />
-            ))}
-
-            {watchDiscomfort && (
-              <FormField control={form.control} name="discomfort_description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Descreva o desconforto</FormLabel>
-                  <FormControl><Textarea rows={2} placeholder="Descreva..." {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            {watchSupport && (
-              <FormField control={form.control} name="support_resources_description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Quais recursos?</FormLabel>
-                  <FormControl><Textarea rows={2} placeholder="Ex: Material concreto..." {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            {!watchUnderstood && (
-              <FormField control={form.control} name="commands_observation" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Dificuldade observada</FormLabel>
-                  <FormControl><Textarea rows={2} placeholder="Descreva..." {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            {watchReinforcers && (
-              <FormField control={form.control} name="reinforcers_description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs text-muted-foreground">Quais reforçadores?</FormLabel>
-                  <FormControl><Textarea rows={2} placeholder="Ex: Elogios verbais, token..." {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            <FormField control={form.control} name="conducted_by" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quem conduziu?</FormLabel>
-                <FormControl>
-                  <RadioGroup value={field.value} onValueChange={field.onChange} className="flex gap-4 mt-1">
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="atendente_terapeutica" id="at" />
-                      <Label htmlFor="at" className="text-sm font-normal">Atendente Terapêutica</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value="professor" id="prof" />
-                      <Label htmlFor="prof" className="text-sm font-normal">Professor</Label>
-                    </div>
-                  </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {/* File upload */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Prova Respondida (opcional)</Label>
-              <label className="flex flex-col items-center gap-2 border-2 border-dashed border-border rounded-xl p-4 cursor-pointer hover:border-primary/50 transition-colors">
-                <Upload className="w-5 h-5 text-muted-foreground" />
-                {examFile ? (
-                  <span className="text-sm font-medium text-primary">{examFile.name}</span>
-                ) : (
-                  <span className="text-sm text-muted-foreground">Selecionar PDF</span>
-                )}
-                <input type="file" accept=".pdf" className="hidden" onChange={(e) => setExamFile(e.target.files?.[0] ?? null)} />
-              </label>
-              {examFile && (
-                <button type="button" onClick={() => setExamFile(null)} className="text-xs text-destructive hover:underline">
-                  Remover
-                </button>
-              )}
-            </div>
-
-            <FormField control={form.control} name="free_description" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Descrição livre (opcional)</FormLabel>
-                <FormControl><Textarea rows={3} placeholder="Observações gerais..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  Salvando...
-                </span>
-              ) : "Salvar Registro"}
-            </Button>
-          </form>
-        </Form>
+      <div className="p-6 space-y-4">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <span className="text-sm font-medium text-muted-foreground">{records.length} registro(s)</span>
-        <Button size="sm" className="gap-1.5" onClick={() => setShowForm(true)}>
-          <Plus size={14} /> Novo Registro
-        </Button>
+    <div className="p-6 lg:p-8 space-y-6 max-w-4xl">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <ClipboardList size={20} className="text-primary" />
+          <h2 className="text-lg font-bold">Registros Avaliativos</h2>
+          <Badge variant="outline" className="text-[10px]">Somente visualizacao</Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Registros preenchidos pelo AT no portal. {records.length} registro(s) no {bimester}o bimestre.
+        </p>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-10">
-          <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        </div>
-      ) : records.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-sm font-medium text-muted-foreground">Nenhum registro avaliativo</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Clique em "Novo Registro" para criar.</p>
+      {/* Info banner */}
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/15">
+        <FileText size={18} className="text-primary mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Os registros avaliativos sao preenchidos pelo Atendente Terapeutico (AT) apos aplicar as provas.
+          Aqui voce visualiza todos os registros enviados, incluindo o PDF da prova executada.
+        </p>
+      </div>
+
+      {/* Records list */}
+      {records.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-border bg-muted/20 p-10 text-center space-y-3">
+          <ClipboardList size={28} className="mx-auto text-muted-foreground/30" />
+          <p className="font-semibold text-sm">Nenhum registro avaliativo</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            O AT ainda nao enviou registros para este bimestre. Os registros aparecem aqui automaticamente apos serem preenchidos no portal.
+          </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {records.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 rounded-xl border border-border p-3.5">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium">
-                    {new Date(r.evaluation_date).toLocaleDateString("pt-BR")}
-                  </p>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {KNOWLEDGE_AREA_LABELS[r.knowledge_area as KnowledgeArea] ?? r.knowledge_area}
-                  </Badge>
-                  <Badge variant={r.completed_evaluation ? "outline" : "destructive"} className={cn("text-[10px]", r.completed_evaluation ? "text-success border-success/40 bg-success/5" : "")}>
-                    {r.completed_evaluation ? "Concluída" : "Não concluída"}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{r.contents}</p>
+        <div className="space-y-3">
+          {records.map((reg) => {
+            const expanded = expandedId === reg.id;
+            return (
+              <div key={reg.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                {/* Header */}
+                <button
+                  className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-left"
+                  onClick={() => setExpandedId(expanded ? null : reg.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <ClipboardList size={18} className="text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">
+                        {AREA_LABELS[reg.knowledge_area] ?? reg.knowledge_area}
+                      </p>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                        <span className="flex items-center gap-1">
+                          <Calendar size={10} /> {formatDate(reg.evaluation_date)}
+                        </span>
+                        {reg.duration_minutes && (
+                          <span className="flex items-center gap-1">
+                            <Clock size={10} /> {reg.duration_minutes} min
+                          </span>
+                        )}
+                        {reg.exam_type && (
+                          <Badge variant="outline" className="text-[9px] py-0 px-1.5">
+                            {reg.exam_type === "v1" ? "V1 Mensal" : "V2 Bimestral"}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {reg.exam_file_url && (
+                      <Badge className="bg-success/15 text-success border-0 text-[10px]">PDF anexado</Badge>
+                    )}
+                    <Badge variant={reg.completed_evaluation ? "default" : "secondary"} className="text-[10px]">
+                      {reg.completed_evaluation ? "Concluiu" : "Nao concluiu"}
+                    </Badge>
+                  </div>
+                </button>
+
+                {/* Expanded details */}
+                {expanded && (
+                  <div className="border-t border-border/50 p-4 space-y-4 bg-muted/10">
+                    {/* Contents */}
+                    {reg.contents && (
+                      <div>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Conteudos</p>
+                        <p className="text-sm">{reg.contents}</p>
+                      </div>
+                    )}
+
+                    {/* Toggles */}
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      <BoolBadge value={reg.showed_resistance} label="Apresentou resistencia" />
+                      <BoolBadge value={reg.showed_discomfort} label="Demonstrou desconforto" />
+                      <BoolBadge value={reg.used_support_resources} label="Usou recursos de apoio" />
+                      <BoolBadge value={reg.understood_commands} label="Compreendeu comandos" />
+                      <BoolBadge value={reg.used_reinforcers} label="Usou reforcadores" />
+                      <BoolBadge value={reg.completed_evaluation} label="Completou avaliacao" />
+                    </div>
+
+                    {/* Conditional descriptions */}
+                    {reg.discomfort_description && (
+                      <div className="text-xs"><strong>Desconforto:</strong> {reg.discomfort_description}</div>
+                    )}
+                    {reg.support_resources_description && (
+                      <div className="text-xs"><strong>Recursos:</strong> {reg.support_resources_description}</div>
+                    )}
+                    {reg.commands_observation && (
+                      <div className="text-xs"><strong>Comandos:</strong> {reg.commands_observation}</div>
+                    )}
+                    {reg.reinforcers_description && (
+                      <div className="text-xs"><strong>Reforcadores:</strong> {reg.reinforcers_description}</div>
+                    )}
+
+                    {/* Conducted by */}
+                    <div className="text-xs text-muted-foreground">
+                      Conduzido por: <strong>{reg.conducted_by === "atendente_terapeutica" ? "Atendente Terapeutica" : "Professor"}</strong>
+                    </div>
+
+                    {/* Free description */}
+                    {reg.description && (
+                      <div className="rounded-lg bg-card border border-border/50 p-3">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Observacoes</p>
+                        <p className="text-sm text-muted-foreground">{reg.description}</p>
+                      </div>
+                    )}
+
+                    {/* PDF attachment */}
+                    {reg.exam_file_url ? (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-success/5 border border-success/20">
+                        <FileText size={16} className="text-success shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold">Prova executada (PDF)</p>
+                          <a href={reg.exam_file_url} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline flex items-center gap-1">
+                            Abrir PDF <ExternalLink size={10} />
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-warning/5 border border-warning/20">
+                        <FileText size={16} className="text-warning shrink-0" />
+                        <p className="text-xs text-warning">Nenhum PDF da prova anexado</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

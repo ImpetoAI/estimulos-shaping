@@ -356,13 +356,14 @@ export default function PortalPatientDetailPage() {
             <BookOpen className="w-4 h-4 mr-2" /> Preencher / Editar Perfil Academico
           </Button>
         )}
-        <Button
-          className="w-full"
-          variant={isCoord ? "outline" : "default"}
-          onClick={() => navigate(`/portal/pacientes/${id}/registro`)}
-        >
-          <Plus className="w-4 h-4 mr-2" /> Novo Registro Avaliativo
-        </Button>
+        {isAT && (
+          <Button
+            className="w-full"
+            onClick={() => navigate(`/portal/pacientes/${id}/registro`)}
+          >
+            <Plus className="w-4 h-4 mr-2" /> Novo Registro Avaliativo
+          </Button>
+        )}
       </div>
 
       {/* Provas disponiveis — visivel pra AT */}
@@ -407,8 +408,8 @@ export default function PortalPatientDetailPage() {
         </div>
       )}
 
-      {/* Registries history */}
-      <div>
+      {/* Registries history — only for AT */}
+      {isAT && <div>
         <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
           <ClipboardList className="w-4 h-4 text-primary" /> Historico de Registros
         </h3>
@@ -447,7 +448,7 @@ export default function PortalPatientDetailPage() {
             ))}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
