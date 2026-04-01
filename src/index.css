@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 207 10% 40%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 207 10% 30%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 207 10% 30%;
+
+    --primary: 197 55% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 345 78% 73%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 200 20% 95%;
+    --muted-foreground: 207 10% 55%;
+
+    --accent: 197 55% 92%;
+    --accent-foreground: 197 55% 30%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 15% 90%;
+    --input: 200 15% 88%;
+    --ring: 197 55% 52%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 197 55% 18%;
+    --sidebar-foreground: 197 20% 92%;
+    --sidebar-primary: 345 78% 73%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 197 55% 24%;
+    --sidebar-accent-foreground: 197 20% 92%;
+    --sidebar-border: 197 40% 25%;
+    --sidebar-ring: 345 78% 73%;
+
+    --graphite: 207 10% 42%;
+    --estimulos-blue: 197 55% 52%;
+    --estimulos-blue-light: 197 55% 95%;
+    --estimulos-blue-dark: 197 55% 35%;
+    --estimulos-pink: 345 78% 73%;
+    --estimulos-pink-light: 345 78% 93%;
+    --estimulos-pink-dark: 345 78% 55%;
+
+    --success: 152 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 100%;
+    --info: 197 55% 52%;
+    --info-foreground: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Nunito', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold text-card-foreground;
+  }
+}
+
+@layer components {
+  .kpi-card {
+    @apply bg-card rounded-xl p-5 shadow-sm border border-border transition-all duration-200 hover:shadow-md;
+  }
+
+  .section-title {
+    @apply text-lg font-bold text-card-foreground mb-3;
+  }
+
+  .step-indicator {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold;
+  }
+
+  .step-indicator-active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .step-indicator-complete {
+    @apply bg-secondary text-secondary-foreground;
+  }
+
+  .step-indicator-pending {
+    @apply bg-muted text-muted-foreground;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
