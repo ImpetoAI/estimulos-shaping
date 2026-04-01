@@ -76,7 +76,7 @@ const schema = z.object({
     .enum(["introducao", "reforco", "avaliacao"])
     .optional(),
   tags: z.array(z.string()).optional(),
-  base: z.enum(["infantil", "teens", "desatualizada"]).default("infantil"),
+  base: z.enum(["infantil", "fundamental", "teens"]).default("infantil"),
   bncc_tags: z.string().optional(),
   status: z.enum(["pendente", "em_design", "concluida"]).default("pendente"),
   designer_link: z.string().url("URL inválida").optional().or(z.literal("")),
@@ -158,7 +158,7 @@ const USAGE_CONTEXTS = [
 const BASE_OPTIONS = [
   { value: "infantil", label: "Infantil" },
   { value: "teens", label: "Teens" },
-  { value: "desatualizada", label: "Desatualizada" },
+  { value: "fundamental", label: "Fundamental" },
 ];
 
 const BASE_BADGE: Record<
@@ -175,10 +175,10 @@ const BASE_BADGE: Record<
     className:
       "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   },
-  desatualizada: {
-    label: "Desatualizada",
+  fundamental: {
+    label: "Fundamental",
     className:
-      "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   },
 };
 
@@ -646,7 +646,7 @@ export default function BancoAtividadesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((item) => {
             const base = BASE_BADGE[item.base] ?? BASE_BADGE.infantil;
-            const isOutdated = item.base === "desatualizada";
+            const isOutdated = false;
             return (
               <div
                 key={item.id}

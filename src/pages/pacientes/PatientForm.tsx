@@ -254,9 +254,27 @@ export function PatientForm() {
             name="foto_url"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>URL da Foto</FormLabel>
+                <FormLabel>Foto do Paciente</FormLabel>
                 <FormControl>
-                  <Input placeholder="https://..." {...field} />
+                  <div className="space-y-2">
+                    {field.value && (
+                      <img src={field.value} alt="Foto" className="w-16 h-16 rounded-lg object-cover border" />
+                    )}
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const path = `fotos/${Date.now()}-${file.name}`;
+                        const { error } = await (await import("@/lib/supabase")).supabase.storage.from("photos").upload(path, file);
+                        if (!error) {
+                          const { data } = (await import("@/lib/supabase")).supabase.storage.from("photos").getPublicUrl(path);
+                          field.onChange(data.publicUrl);
+                        }
+                      }}
+                    />
+                  </div>
                 </FormControl>
               </FormItem>
             )}

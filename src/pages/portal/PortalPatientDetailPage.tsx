@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { db } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface StudentData {
   id: string;
@@ -72,6 +73,9 @@ function formatDate(dateStr: string | null) {
 export default function PortalPatientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isCoord = user?.role === "coordenador" || user?.role === "admin";
+  const isAT = user?.role === "atendente_terapeutica";
 
   const [student, setStudent] = useState<StudentData | null>(null);
   const [cases, setCases] = useState<CaseData[]>([]);
@@ -342,15 +346,34 @@ export default function PortalPatientDetailPage() {
         )}
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons — conditional by role */}
       <div className="flex flex-col gap-3 mb-6">
+        {isCoord && (
+          <Button
+            className="w-full"
+            onClick={() => navigate(`/portal/pacientes/${id}/perfil`)}
+          >
+            <BookOpen className="w-4 h-4 mr-2" /> Preencher / Editar Perfil Academico
+          </Button>
+        )}
         <Button
           className="w-full"
+          variant={isCoord ? "outline" : "default"}
           onClick={() => navigate(`/portal/pacientes/${id}/registro`)}
         >
           <Plus className="w-4 h-4 mr-2" /> Novo Registro Avaliativo
         </Button>
       </div>
+
+      {/* Provas disponiveis — visivel pra AT */}
+      {isAT && activeCase && (
+        <div className="bg-white rounded-2xl shadow-sm border border-border/40 p-5 mb-6">
+          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-primary" /> Provas Disponiveis — B{activeCase.current_bimester}
+          </h3>
+          <ProvasDisponiveis caseId={activeCase.id} bimester={activeCase.current_bimester} />
+        </div>
+      )}
 
       {/* Previous years */}
       {previousCases.length > 0 && (
@@ -425,6 +448,65 @@ export default function PortalPatientDetailPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ProvasDisponiveis({ caseId, bimester }: { caseId: string; bimester: number }) {
+  const [exams, setExams] = useState<{ id: string; discipline: string; scenario: string; exam_type: string; adapted_exam_url: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    db.from("adapted_exams")
+      .select("id, discipline, scenario, exam_type, adapted_exam_url")
+      .eq("case_id", caseId)
+      .eq("bimester", bimester)
+      .then(({ data }) => { setExams((data ?? []) as any); setLoading(false); });
+  }, [caseId, bimester]);
+
+  if (loading) return <div className="text-xs text-muted-foreground">Carregando...</div>;
+
+  if (exams.length === 0) {
+    return (
+      <div className="text-center py-6">
+        <Circle className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+        <p className="text-sm text-muted-foreground">Nenhuma prova disponivel neste bimestre</p>
+        <p className="text-xs text-muted-foreground/60 mt-0.5">As provas aparecem aqui quando o designer finalizar</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {exams.map((exam) => (
+        <div key={exam.id} className="flex items-center justify-between p-3 rounded-xl border border-border/50 bg-muted/20">
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+              exam.adapted_exam_url ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
+            }`}>
+              {exam.exam_type === "v1" ? "V1" : "V2"}
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{exam.discipline}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {exam.scenario === "school_adaptation" ? "Adequacao escola" : "Gerada por IA"}
+              </p>
+            </div>
+          </div>
+          {exam.adapted_exam_url ? (
+            <a
+              href={exam.adapted_exam_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+            >
+              Baixar PDF
+            </a>
+          ) : (
+            <span className="text-[10px] text-warning font-medium px-2 py-0.5 rounded-full bg-warning/10">Aguardando design</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

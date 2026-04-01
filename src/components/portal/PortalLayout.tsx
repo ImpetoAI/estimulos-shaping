@@ -25,7 +25,7 @@ export default function PortalLayout() {
             <img src={logo} alt="Estimulos" className="h-9 w-auto" />
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-foreground leading-tight">Estimulos</p>
-              <p className="text-[10px] text-muted-foreground -mt-0.5">Portal do Atendente</p>
+              <p className="text-[10px] text-muted-foreground -mt-0.5">Portal</p>
             </div>
           </div>
 

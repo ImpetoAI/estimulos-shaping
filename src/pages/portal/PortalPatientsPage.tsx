@@ -29,22 +29,37 @@ export default function PortalPatientsPage() {
     loadPatients();
   }, [user]);
 
+  const isCoord = user?.role === "coordenador" || user?.role === "admin";
+  const isAT = user?.role === "atendente_terapeutica";
+
   async function loadPatients() {
     setLoading(true);
 
-    // Buscar alunos atribuidos a este AT via student_assignments
-    const { data: assignments } = await db
-      .from("student_assignments")
-      .select("student_id")
-      .eq("profile_id", user!.id);
+    let studentIds: string[] = [];
 
-    if (!assignments || assignments.length === 0) {
+    if (isCoord) {
+      // Coordenador: ve alunos onde e coordenador OU todos (admin)
+      if (user?.role === "admin") {
+        const { data: allStudents } = await db.from("students").select("id").eq("status", "active");
+        studentIds = (allStudents ?? []).map((s: any) => s.id);
+      } else {
+        const { data: coordStudents } = await db.from("students").select("id").eq("coordinator_id", user!.id).eq("status", "active");
+        studentIds = (coordStudents ?? []).map((s: any) => s.id);
+      }
+    } else {
+      // AT: ve alunos atribuidos via student_assignments
+      const { data: assignments } = await db
+        .from("student_assignments")
+        .select("student_id")
+        .eq("profile_id", user!.id);
+      studentIds = (assignments ?? []).map((a: any) => a.student_id);
+    }
+
+    if (studentIds.length === 0) {
       setPatients([]);
       setLoading(false);
       return;
     }
-
-    const studentIds = assignments.map((a) => a.student_id);
 
     const { data: students } = await db
       .from("students")
@@ -92,9 +107,11 @@ export default function PortalPatientsPage() {
     <div>
       {/* Welcome header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Meus Pacientes</h1>
+        <h1 className="text-2xl font-bold text-foreground">{isCoord ? "Meus Alunos" : "Meus Pacientes"}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Ola, {user?.full_name?.split(" ")[0]}. Voce tem <strong className="text-foreground">{patients.length}</strong> aluno{patients.length !== 1 ? "s" : ""} atribuido{patients.length !== 1 ? "s" : ""}.
+          Ola, {user?.full_name?.split(" ")[0]}. Voce tem <strong className="text-foreground">{patients.length}</strong> aluno{patients.length !== 1 ? "s" : ""}.
+          {isCoord && <span className="ml-1 text-primary font-medium">(Coordenador)</span>}
+          {isAT && <span className="ml-1 text-primary font-medium">(AT)</span>}
         </p>
       </div>
 

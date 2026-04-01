@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, Pencil, User, School, MapPin, Calendar, Shield,
   Stethoscope, Lock, Loader2, CheckCircle2, XCircle, AlertTriangle,
@@ -190,6 +190,11 @@ export default function PatientDetailPage() {
   const [selectedBimester, setSelectedBimester] = useState<number>(1);
   const [caseBimesters, setCaseBimesters] = useState<CaseBimester[]>([]);
   const [perfilConcluido, setPerfilConcluido] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") ?? "perfil";
+  const handleTabChange = (tab: string) => {
+    setSearchParams((prev) => { prev.set("tab", tab); return prev; }, { replace: true });
+  };
   const [loading, setLoading] = useState(true);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [closingBimester, setClosingBimester] = useState(false);
@@ -641,7 +646,7 @@ export default function PatientDetailPage() {
               Nenhum módulo pedagógico habilitado no cadastro.
             </div>
           ) : (
-            <Tabs defaultValue={visibleTabs[0].key} className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <div className="border-b border-border overflow-x-auto">
                 <TabsList className="h-auto bg-transparent rounded-none px-4 gap-0 flex-nowrap">
                   {visibleTabs.map((modulo) => {

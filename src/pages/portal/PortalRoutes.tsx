@@ -6,6 +6,7 @@ import PortalIndexPage from "./PortalIndexPage";
 import PortalPatientsPage from "./PortalPatientsPage";
 import PortalPatientDetailPage from "./PortalPatientDetailPage";
 import PortalEvaluationFormPage from "./PortalEvaluationFormPage";
+import PortalAcademicProfilePage from "./PortalAcademicProfilePage";
 
 export const PortalRoutes = (
   <>
@@ -21,6 +22,7 @@ export const PortalRoutes = (
       <Route path="/portal/pacientes" element={<PortalPatientsPage />} />
       <Route path="/portal/pacientes/:id" element={<PortalPatientDetailPage />} />
       <Route path="/portal/pacientes/:id/registro" element={<PortalEvaluationFormPage />} />
+      <Route path="/portal/pacientes/:id/perfil" element={<PortalAcademicProfilePage />} />
     </Route>
   </>
 );

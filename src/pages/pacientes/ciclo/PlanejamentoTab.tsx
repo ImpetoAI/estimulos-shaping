@@ -31,9 +31,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/supabase";
 import { type CicloTabProps } from "./_shared";
+import { DISCIPLINAS } from "@/types/patient";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface StudentData {
@@ -393,6 +397,7 @@ export default function PlanejamentoTab({ caseId, bimester, studentId }: CicloTa
   const [profile, setProfile] = useState<AcademicProfile | null>(null);
   const [loadingStudent, setLoadingStudent] = useState(true);
 
+  const [selectedDiscipline, setSelectedDiscipline] = useState(DISCIPLINAS[0]);
   const [generated, setGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -478,6 +483,14 @@ export default function PlanejamentoTab({ caseId, bimester, studentId }: CicloTa
           <Badge className="gap-1.5 py-1 px-3 text-xs font-semibold bg-success/15 text-success border-0">
             <CheckCircle2 size={12} /> {bimester}o Bimestre
           </Badge>
+          <Select value={selectedDiscipline} onValueChange={setSelectedDiscipline}>
+            <SelectTrigger className="w-40 h-8 text-xs font-semibold">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DISCIPLINAS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </motion.div>
 
