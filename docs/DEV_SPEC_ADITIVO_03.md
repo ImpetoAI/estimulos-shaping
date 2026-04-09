@@ -246,7 +246,112 @@ Quando aluno e cadastrado com escola X:
 
 ---
 
-## 7. SERIE E PROGRESSAO AUTOMATICA
+## 7. BANCO DE CURRICULOS — ESTRUTURA HIERARQUICA POR MATERIA
+
+### Validacao Sonia (09/04/2026)
+> "Penso que seja melhor 1 curriculo por materia. PQ temos casos onde os livros de ingles, artes sao de editoras diferentes."
+> Estrutura ideal: Escola > Serie > Bimestre > Materia > Arquivo
+
+### Situacao atual
+Banco de curriculos tem 1 registro por curriculo (generico). Campos: origin, escola, stage, discipline, grade, content.
+
+### Mudanca
+Curriculo original e cadastrado POR MATERIA. Estrutura hierarquica:
+
+```
+Escola Darcy Ribeiro
+ └─ 1o Ano
+     └─ 1o Bimestre
+         ├─ Portugues → arquivo_portugues.pdf (Editora Anglo)
+         ├─ Matematica → arquivo_matematica.pdf (Editora Anglo)
+         ├─ Ingles → arquivo_ingles.pdf (Editora Oxford)
+         └─ Artes → arquivo_artes.pdf (Editora Ática)
+     └─ 2o Bimestre
+         ├─ Portugues → ...
+         └─ ...
+ └─ 2o Ano
+     └─ ...
+```
+
+### Schema atualizado (curriculum_banks)
+```sql
+-- Cada registro = 1 materia de 1 serie de 1 bimestre de 1 escola
+ALTER TABLE estimulos.curriculum_banks
+  ADD COLUMN IF NOT EXISTS school_id uuid REFERENCES estimulos.schools(id),
+  ADD COLUMN IF NOT EXISTS bimester int,
+  ADD COLUMN IF NOT EXISTS file_url text;
+
+-- Campos existentes usados:
+-- escola (text) → migrar pra school_id (FK)
+-- discipline (text) → materia (Portugues, Matematica, etc.)
+-- grade (text) → serie (1o ano, 2o ano, etc.)
+-- content (text) → conteudo textual (opcional, complementar ao arquivo)
+-- origin (text) → editora/fonte (Anglo, Oxford, BNCC, etc.)
+-- origin_name (text) → nome do livro
+
+-- Unique constraint: 1 curriculo por escola+serie+bimestre+materia
+CREATE UNIQUE INDEX IF NOT EXISTS idx_curriculum_banks_unique
+  ON estimulos.curriculum_banks (school_id, grade, bimester, discipline)
+  WHERE school_id IS NOT NULL AND bimester IS NOT NULL AND discipline IS NOT NULL;
+```
+
+### Frontend — Banco de Curriculos (refatorar)
+
+#### Visao em arvore (nova)
+Em vez de tabela flat, mostrar navegacao hierarquica:
+```
+[Select Escola: Darcy Ribeiro ▼]  [Select Serie: 1o Ano ▼]
+
+  1o Bimestre
+  ┌──────────────┬────────────┬──────────────┬─────────────┐
+  │ Portugues    │ Matematica │ Ingles       │ Artes       │
+  │ Anglo        │ Anglo      │ Oxford       │ Atica       │
+  │ ✓ Arquivo    │ ✓ Arquivo  │ ✓ Arquivo    │ ○ Pendente  │
+  │ [Ver] [Edit] │ [Ver]      │ [Ver]        │ [Cadastrar] │
+  └──────────────┴────────────┴──────────────┴─────────────┘
+
+  2o Bimestre
+  ┌──────────────┬────────────┬──────────────┬─────────────┐
+  │ ...          │ ...        │ ...          │ ...         │
+  └──────────────┴────────────┴──────────────┴─────────────┘
+```
+
+#### Cadastro individual
+Dialog pra cadastrar 1 curriculo:
+- Escola (select — obrigatorio)
+- Serie (select — obrigatorio)
+- Bimestre (select 1-4 — obrigatorio)
+- Materia (select — obrigatorio)
+- Editora/Fonte (text)
+- Nome do livro (text)
+- Upload arquivo (PDF/DOC)
+- Conteudo textual (textarea — opcional, complementar)
+
+#### Cadastro em lote (futuro)
+Upload de multiplos arquivos de uma vez, sistema detecta materia pelo nome.
+
+### Impacto no vinculo com aluno
+
+Ao vincular curriculo ao aluno (CurriculoOriginalTab):
+- Sistema busca por: `school_id = aluno.school_id AND grade = aluno.serie AND bimester = bimestre_atual`
+- Retorna LISTA de materias com seus arquivos
+- Cada materia mostra: disciplina + editora + link arquivo + status (completo/pendente)
+
+### Impacto no curriculo adaptado
+
+A IA recebe como input TODOS os curriculos originais das materias daquele bimestre:
+```
+Input IA:
+  - Perfil academico (scores, nivel)
+  - Portugues: conteudo do Anglo 1o ano B1
+  - Matematica: conteudo do Anglo 1o ano B1
+  - Ingles: conteudo do Oxford 1o ano B1
+  → Output: Curriculo adaptado global com secoes por materia
+```
+
+---
+
+## 8. SERIE E PROGRESSAO AUTOMATICA (renumerado)
 
 ### Situacao atual — JA IMPLEMENTADO
 - `GRADE_PROGRESSION` mapeia serie atual → proxima serie
@@ -284,6 +389,7 @@ Ja esta no fluxo. So precisa:
 | 6 | Cadastro de escolas | Reativar CRUD + select | P1 |
 | 7 | Progressao Ed. Infantil | Adicionar mapeamento | P2 |
 | 8 | Reprovacao do aluno | 5 campos no cases + dialog + badges | P1 |
+| 9 | Banco curriculos hierarquico | Por escola+serie+bimestre+materia + arquivo | P0 |
 | — | PDF espelho curriculo | Linear/futuro | P3 |
 
 ---
