@@ -211,6 +211,7 @@ Ja esta no fluxo. So precisa:
 | 5 | Toggle necessita adaptacao | 1 campo + condicional UI | P1 |
 | 6 | Cadastro de escolas | Reativar CRUD + select | P1 |
 | 7 | Progressao Ed. Infantil | Adicionar mapeamento | P2 |
+| 8 | Reprovacao do aluno | 5 campos no cases + dialog + badges | P1 |
 | — | PDF espelho curriculo | Linear/futuro | P3 |
 
 ---
@@ -236,4 +237,112 @@ ALTER TABLE estimulos.pendencies
 -- 3. Necessita adaptacao
 ALTER TABLE estimulos.students
   ADD COLUMN IF NOT EXISTS necessita_adaptacao boolean DEFAULT true;
+
+-- 4. Reprovacao
+ALTER TABLE estimulos.cases
+  ADD COLUMN IF NOT EXISTS outcome text DEFAULT 'em_andamento'
+    CHECK (outcome IN ('em_andamento', 'aprovado', 'reprovado')),
+  ADD COLUMN IF NOT EXISTS outcome_reason text,
+  ADD COLUMN IF NOT EXISTS outcome_date timestamptz,
+  ADD COLUMN IF NOT EXISTS outcome_by uuid REFERENCES estimulos.profiles(id),
+  ADD COLUMN IF NOT EXISTS is_repeat boolean DEFAULT false;
+  -- is_repeat = true quando o caso foi criado porque o aluno reprovou no anterior
+```
+
+---
+
+## 10. REPROVACAO DO ALUNO
+
+### Contexto
+Quando o aluno completa o ano letivo (B4 fechado), o coordenador decide: aprovar ou reprovar.
+O sistema ja tem "Iniciar Ano Letivo" que aprova. Falta o fluxo de reprovacao.
+
+### Fluxo atual (so aprovacao)
+```
+B4 fecha → Botao "Iniciar Ano Letivo 2027"
+         → Cria caso 2027 com serie+1
+         → Caso 2026 fica read-only
+```
+
+### Fluxo proposto (aprovacao + reprovacao)
+```
+B4 fecha → Dialog com 2 opcoes:
+
+  [Aprovar e Avançar Serie]
+    → Cria caso 2027 com serie+1
+    → Caso 2026: outcome = 'aprovado'
+
+  [Reprovar — Repetir Serie]
+    → Abre campo: justificativa da reprovacao (obrigatorio)
+    → Cria caso 2027 com MESMA serie
+    → Caso 2027: is_repeat = true
+    → Caso 2026: outcome = 'reprovado', outcome_reason = texto
+```
+
+### Regras de negocio
+
+1. **Caso reprovado permanece intacto** — todos os dados (perfil, curriculo, registros, timeline) preservados como historico read-only
+2. **Novo caso com mesma serie** — campo `is_repeat = true` marca que e repetencia
+3. **Copiar perfil opcional** — ao criar caso de repetencia, dialog pergunta: "Copiar perfil academico do ano anterior como base?" (sim/nao)
+   - Se sim: copia blocos do perfil do ultimo bimestre do ano anterior para B1 do novo caso (como rascunho, nao concluido)
+   - Se nao: perfil comeca do zero
+4. **Curriculo NAO copia** — precisa ser refeito (aluno nao avancou, abordagem pode mudar)
+5. **Justificativa obrigatoria** — campo `outcome_reason` nao pode ser vazio na reprovacao
+6. **Quem decidiu** — campo `outcome_by` registra o coordenador que tomou a decisao
+
+### Impacto visual
+
+#### PatientDetailPage — Dialog de encerramento de ano
+Ao fechar B4, em vez de so mostrar "Iniciar Ano Letivo":
+```
+┌─────────────────────────────────────────────┐
+│  Ano letivo 2026 encerrado                  │
+│  Angelo — 5o ano                            │
+│                                             │
+│  [✓ Aprovar — Iniciar 6o ano em 2027]       │
+│  [✗ Reprovar — Repetir 5o ano em 2027]      │
+│                                             │
+│  Ao reprovar:                               │
+│  ┌─────────────────────────────────────┐    │
+│  │ Justificativa: ________________     │    │
+│  │ □ Copiar perfil do ano anterior     │    │
+│  └─────────────────────────────────────┘    │
+└─────────────────────────────────────────────┘
+```
+
+#### Lista de pacientes
+- Badge "Repetente" ao lado do nome se caso atual tem `is_repeat = true`
+
+#### Ficha do paciente — anos anteriores
+- Ano reprovado: badge vermelho "Reprovado" + justificativa visivel
+- Ano aprovado: badge verde "Aprovado"
+
+#### Portal coordenador
+- Aluno repetente mostra badge na lista
+
+### Historico do aluno (exemplo)
+```
+2025 — 4o ano — Aprovado ✓
+2026 — 5o ano — Reprovado ✗ (Justificativa: "Nao atingiu objetivos minimos em leitura e matematica")
+2027 — 5o ano — Em andamento (Repetente)
+```
+
+### Tabela cases (campos novos)
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| outcome | text | 'em_andamento' / 'aprovado' / 'reprovado' |
+| outcome_reason | text | Justificativa (obrigatoria se reprovado) |
+| outcome_date | timestamptz | Quando foi decidido |
+| outcome_by | uuid → profiles | Quem decidiu |
+| is_repeat | boolean | Caso criado por reprovacao do anterior |
+
+### Query: verificar se aluno e repetente
+```sql
+SELECT c.is_repeat, prev.outcome, prev.outcome_reason
+FROM estimulos.cases c
+LEFT JOIN estimulos.cases prev
+  ON prev.student_id = c.student_id
+  AND prev.academic_year = c.academic_year - 1
+WHERE c.student_id = :student_id
+  AND c.academic_year = :current_year;
 ```
