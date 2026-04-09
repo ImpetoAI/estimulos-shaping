@@ -154,18 +154,90 @@ ALTER TABLE estimulos.students
 Campo `escola` e texto livre no cadastro do aluno.
 
 ### Mudanca
-Voltar CRUD de escolas. Select no cadastro + "Adicionar nova escola".
+CRUD completo de escolas com configuracoes que o aluno HERDA ao ser vinculado.
 
-### Schema (ja existe tabela estimulos.schools)
+### Schema
 ```sql
--- Ja existe, verificar campos:
--- id, name, city, state, type (publica/particular), active
+CREATE TABLE IF NOT EXISTS estimulos.schools (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  city text,
+  state text DEFAULT 'TO',
+  tipo text NOT NULL DEFAULT 'publica'
+    CHECK (tipo IN ('publica', 'particular', 'filantrópica')),
+  frequencia_adaptacao text NOT NULL DEFAULT 'bimestral'
+    CHECK (frequencia_adaptacao IN ('bimestral', 'trimestral', 'semestral', 'anual')),
+  active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
 ```
 
-### Frontend
-- Voltar rota `/escolas` (ou manter so como dialog)
-- PatientForm: trocar Input por Select de escolas + botao "Nova escola"
-- A escola e usado no vinculo com curriculo original (Banco de Curriculos tem campo `escola`)
+### Campos da escola
+
+| Campo | Tipo | Descricao | Impacto no aluno |
+|-------|------|-----------|-----------------|
+| name | text | Nome da escola | Exibido na ficha |
+| tipo | enum | publica / particular / filantropica | Informativo + pode influenciar materiais |
+| frequencia_adaptacao | enum | bimestral / trimestral / semestral / anual | **Define quantos periodos o aluno tem no ano** |
+| city | text | Cidade | Informativo |
+| state | text | UF (default TO) | Informativo |
+
+### Frequencia de adaptacao — impacto no ciclo
+
+A escola define a frequencia. O aluno herda:
+
+| Frequencia | Periodos/ano | Labels | Impacto |
+|-----------|-------------|--------|---------|
+| Bimestral (padrao) | 4 | B1, B2, B3, B4 | Ciclo atual — 4 bimestres |
+| Trimestral | 3 | T1, T2, T3 | 3 trimestres em vez de 4 bimestres |
+| Semestral | 2 | S1, S2 | 2 semestres |
+| Anual | 1 | A1 | 1 periodo unico |
+
+### Heranca no aluno
+Quando o aluno e vinculado a uma escola:
+1. `frequencia_adaptacao` da escola e copiada pro caso do aluno
+2. O PatientDetailPage ajusta o seletor de periodos (B1-B4 ou T1-T3 ou S1-S2 ou A1)
+3. A progressao de ano continua funcionando (fecha ultimo periodo → promove/reprova)
+
+### Mudanca no caso (cases)
+```sql
+ALTER TABLE estimulos.cases
+  ADD COLUMN IF NOT EXISTS frequencia text DEFAULT 'bimestral'
+    CHECK (frequencia IN ('bimestral', 'trimestral', 'semestral', 'anual')),
+  ADD COLUMN IF NOT EXISTS total_periodos int DEFAULT 4;
+```
+
+Ao criar caso, herda da escola:
+```typescript
+const escola = await db.from("schools").select("frequencia_adaptacao").eq("id", student.school_id).single();
+const PERIODOS = { bimestral: 4, trimestral: 3, semestral: 2, anual: 1 };
+const caso = {
+  student_id: student.id,
+  academic_year: 2026,
+  grade: student.current_grade,
+  frequencia: escola.frequencia_adaptacao,
+  total_periodos: PERIODOS[escola.frequencia_adaptacao],
+  current_bimester: 1, // renomear pra current_periodo no futuro
+};
+```
+
+### Frontend — CRUD de escolas
+- Rota: `/admin/escolas` (ou dialog no cadastro)
+- Campos: Nome, Tipo (publica/particular/filantropica), Frequencia (bimestral/trimestral/semestral/anual), Cidade, UF
+- Listar com filtros por tipo e cidade
+- Botao "Nova Escola" no PatientForm
+
+### Frontend — PatientForm
+- Campo `escola`: Select de escolas cadastradas + "Adicionar nova"
+- Ao selecionar escola: mostrar info (tipo + frequencia) como badge abaixo do select
+- Campo `school_id` no schema (uuid, nao mais texto livre)
+
+### Frontend — PatientDetailPage
+- Seletor de periodos dinamico baseado em `case.frequencia`:
+  - Bimestral: B1, B2, B3, B4
+  - Trimestral: T1, T2, T3
+  - Semestral: S1, S2
+  - Anual: A1 (so 1 periodo, seletor oculto)
 
 ### Vinculo com Banco de Curriculos
 Quando aluno e cadastrado com escola X:
@@ -238,7 +310,31 @@ ALTER TABLE estimulos.pendencies
 ALTER TABLE estimulos.students
   ADD COLUMN IF NOT EXISTS necessita_adaptacao boolean DEFAULT true;
 
--- 4. Reprovacao
+-- 4. Escolas com frequencia e tipo
+CREATE TABLE IF NOT EXISTS estimulos.schools (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  city text,
+  state text DEFAULT 'TO',
+  tipo text NOT NULL DEFAULT 'publica'
+    CHECK (tipo IN ('publica', 'particular', 'filantrópica')),
+  frequencia_adaptacao text NOT NULL DEFAULT 'bimestral'
+    CHECK (frequencia_adaptacao IN ('bimestral', 'trimestral', 'semestral', 'anual')),
+  active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+
+-- 5. Aluno vincula a escola por ID (nao texto livre)
+ALTER TABLE estimulos.students
+  ADD COLUMN IF NOT EXISTS school_id uuid REFERENCES estimulos.schools(id);
+
+-- 6. Caso herda frequencia da escola
+ALTER TABLE estimulos.cases
+  ADD COLUMN IF NOT EXISTS frequencia text DEFAULT 'bimestral'
+    CHECK (frequencia IN ('bimestral', 'trimestral', 'semestral', 'anual')),
+  ADD COLUMN IF NOT EXISTS total_periodos int DEFAULT 4;
+
+-- 7. Reprovacao
 ALTER TABLE estimulos.cases
   ADD COLUMN IF NOT EXISTS outcome text DEFAULT 'em_andamento'
     CHECK (outcome IN ('em_andamento', 'aprovado', 'reprovado')),
